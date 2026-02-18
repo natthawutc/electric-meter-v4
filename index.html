@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Kanit', sans-serif; background-color: #64748b; } 
+    .primary-gradient { background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); }
+    .warning-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 300; padding: 1rem; align-items: center; justify-content: center; }
+    .warning-modal.active { display: flex; }
+    .modal-content-box { width: 100%; max-width: 500px; background: white; border-radius: 2rem; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+    .btn-action { width: 100%; padding: 1.25rem; border-radius: 1.25rem; font-weight: bold; font-size: 1.3rem; margin-bottom: 0.75rem; transition: all 0.2s; }
+    .meter-card { border-left: 10px solid #3b82f6; background-color: white; border-radius: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); }
+    .photo-preview { width: 100%; height: 240px; object-fit: cover; border-radius: 1rem; border: 2px solid #e2e8f0; }
+    #messageBox { transition: all 0.3s ease; transform: translate(-50%, -20px); opacity: 0; pointer-events: none; }
+    #messageBox.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+    .progress-container { width: 100%; height: 24px; background-color: #e2e8f0; border-radius: 12px; overflow: hidden; position: relative; display: none; margin-top: 10px; border: 2px solid rgba(255,255,255,0.1); }
+    .progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); transition: width 0.3s ease-out; }
+    .progress-text { position: absolute; width: 100%; text-align: center; font-size: 12px; font-weight: 900; line-height: 24px; color: #1e3a8a; text-shadow: 0 1px 2px rgba(255,255,255,0.5); }
+    
+    /* Input Styles override */
+    input.main-input { font-size: 1.5rem !important; height: 4.5rem !important; }
+    
+    /* Search Input Style */
+    #searchInput { font-size: 1.2rem !important; height: 3.5rem !important; }
+  </style>
+</head>
+<body class="p-4 md:p-8 flex justify-center items-start min-h-screen">
+
+  <script>
+    if (typeof google === 'undefined') {
+      window.google = { script: { run: { withSuccessHandler: function(cb) { return { 
+        withFailureHandler: function() { return this; },
+        getInitialData: function() { cb({ version: "PREVIEW v5.4" }); },
+        getMetersByOwner: function(id) { 
+            cb([
+                {id:"M-001", name:"มิเตอร์ A", zone:"A1", lastReading:100, lastRecordedDate: new Date().toISOString(), lastZone: "A1", lastName: "มิเตอร์ A"}, 
+                {id:"M-002", name:"มิเตอร์ B", zone:"A1", lastReading:200, lastRecordedDate: new Date().toISOString(), lastZone: "OLD_ZONE", lastName: "มิเตอร์ B"},
+                {id:"M-003", name:"มิเตอร์ C", zone:"A2", lastReading:300, lastRecordedDate: "", lastZone: "", lastName: ""},
+                {id:"M-004", name:"มิเตอร์ D", zone:"A2", lastReading:400, lastRecordedDate: "", lastZone: "", lastName: ""}
+            ]); 
+        },
+        verifyEmployeeId: function(id) { cb(true); },
+        submitReadingData: function(p) { setTimeout(() => cb("บันทึกสำเร็จ"), 2500); }
+      }; } } } };
+    }
+  </script>
+
+  <div id="messageBox" class="fixed top-5 left-1/2 -translate-x-1/2 px-8 py-6 rounded-2xl text-white font-bold shadow-2xl z-[500] text-center min-w-[320px]"></div>
+
+  <!-- Success Modal -->
+  <div id="successModal" class="warning-modal">
+    <div class="modal-content-box text-center">
+      <div class="bg-green-600 p-6 text-white text-center shrink-0">
+        <svg class="w-16 h-16 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+        <h2 class="text-2xl font-bold">บันทึกสำเร็จ!</h2>
+      </div>
+      <div class="p-8">
+        <p id="successText" class="text-xl text-slate-700 mb-6 font-medium"></p>
+        <button onclick="closeSuccess()" class="w-full py-5 bg-blue-600 text-white rounded-2xl text-2xl font-bold active:scale-95 transition-all">ตกลง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Warning Modal (Generic) -->
+  <div id="confirmModal" class="warning-modal">
+    <div class="modal-content-box">
+      <div id="modalHeader" class="p-6 text-white text-center bg-amber-500 text-xl font-bold">แจ้งเตือนความผิดปกติ</div>
+      <div class="p-6">
+        <div id="warningText" class="text-lg text-slate-700 text-center mb-6"></div>
+        <div id="optionsContainer"></div>
+        <button onclick="rejectAndFixValue()" class="w-full py-3 text-slate-400 font-bold border-t mt-2" id="cancelBtn">❌ แก้ไขตัวเลข</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="w-full max-w-lg space-y-6 pb-32">
+    <header class="primary-gradient text-white p-8 rounded-3xl shadow-2xl relative text-center">
+      <a href="https://drive.google.com/file/d/1CPeF0zss2S7iWyBYEThXWA1KdjXMgZkT/view?usp=drive_link" target="_blank" class="absolute top-4 right-4 bg-white/20 p-2 rounded-full">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.168.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" stroke-width="2"></path></svg>
+      </a>
+      <h1 class="text-3xl font-bold uppercase tracking-tight">ระบบจดมิเตอร์ไฟฟ้า</h1>
+      <p id="versionDisplay" class="text-blue-100 text-[10px] mt-1 opacity-70 tracking-widest"></p>
+    </header>
+
+    <div class="bg-white p-6 rounded-3xl shadow-lg border border-slate-200 space-y-4">
+      <div>
+        <label class="block text-blue-900 text-center font-bold text-lg mb-2">รหัสพนักงาน 6 หลัก</label>
+        <input type="text" id="ownerIdInput" oninput="saveLocalState()" maxlength="6" inputmode="numeric" placeholder="กรอกรหัส" class="main-input w-full px-4 bg-yellow-50 border-2 border-yellow-200 rounded-2xl font-bold text-center text-5xl h-20 outline-none focus:bg-white focus:border-blue-400">
+      </div>
+      
+      <button onclick="toggleSubstituteMode()" class="w-full py-3 text-slate-500 font-bold text-sm underline hover:text-slate-700">จดแทนผู้อื่น / ระบุผู้จดแทน</button>
+      
+      <div id="substituteSection" class="hidden animate-in fade-in slide-in-from-top-4 pt-2 border-t border-slate-100 mt-2">
+        <label class="block text-amber-600 text-center font-bold text-lg mb-2">รหัสพนักงาน 6 หลัก</label>
+        <input type="text" id="substituteIdInput" oninput="saveLocalState()" maxlength="6" inputmode="numeric" placeholder="รหัสของคุณ" class="main-input w-full px-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-center text-5xl h-20 outline-none focus:bg-white focus:border-amber-400 text-amber-800">
+      </div>
+      
+      <button onclick="startRecording()" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold text-xl active:scale-95 transition-all shadow-md hover:bg-blue-700 mt-4">🚀 เริ่มจด</button>
+    </div>
+
+    <!-- ส่วนค้นหา (Search) -->
+    <div id="searchContainer" class="hidden animate-in fade-in slide-in-from-bottom-2">
+      <div class="relative">
+        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+          <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <input type="text" id="searchInput" onkeyup="filterMeters()" placeholder="ค้นหาชื่อหรือรหัสมิเตอร์..." class="w-full pl-12 pr-4 bg-white border-2 border-slate-200 rounded-2xl text-lg font-medium outline-none focus:border-blue-500 shadow-sm transition-all">
+      </div>
+    </div>
+
+    <div id="meterListContainer" class="space-y-8 hidden"></div>
+
+    <div id="footerSection" class="fixed bottom-8 right-6 z-50 hidden flex flex-col items-end gap-3">
+      <div id="progressContainer" class="progress-container w-32 bg-white border-2 border-blue-100 shadow-lg hidden">
+        <div id="progressText" class="progress-text">0%</div>
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+      <button id="submitBtn" onclick="submitFinalProcess()" class="flex items-center gap-2 bg-green-600 text-white px-6 py-4 rounded-full font-bold text-xl shadow-2xl active:scale-95 transition-all hover:bg-green-700 border-2 border-white/20">
+        <span class="text-2xl">💾</span> <span>ส่ง</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let activeWarningInput = null;
+    let meterNotes = {};
+    let meterImages = {}; 
+    let progressInterval = null;
+    let isSubstituteMode = false;
+    let warningQueue = [];
+    let currentWarningIndex = 0;
+    let accumulatedNotes = [];
+    const LOCAL_STORAGE_KEY = 'METER_APP_V5_4';
+
+    window.onload = () => {
+      google.script.run.withSuccessHandler(data => {
+        document.getElementById('versionDisplay').textContent = data.version;
+        restoreLocalState();
+      }).getInitialData();
+    };
+
+    function filterMeters() {
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      const cards = document.querySelectorAll('.meter-card');
+      let visibleCount = 0;
+      
+      cards.forEach(card => {
+        const name = card.dataset.searchName;
+        const id = card.dataset.searchId;
+        const shouldShow = name.includes(query) || id.includes(query);
+        
+        if (shouldShow) {
+          card.classList.remove('hidden');
+          visibleCount++;
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+      
+      // Optional: Show message if no results
+      const container = document.getElementById('meterListContainer');
+      const noResultId = 'no-search-results';
+      let noResultEl = document.getElementById(noResultId);
+      
+      if (visibleCount === 0 && query !== '') {
+        if (!noResultEl) {
+          noResultEl = document.createElement('div');
+          noResultEl.id = noResultId;
+          noResultEl.className = 'text-center p-8 text-slate-400 font-bold';
+          noResultEl.innerHTML = `ไม่พบมิเตอร์ที่ค้นหา "${query}"`;
+          container.appendChild(noResultEl);
+        } else {
+          noResultEl.innerHTML = `ไม่พบมิเตอร์ที่ค้นหา "${query}"`;
+          noResultEl.style.display = 'block';
+        }
+      } else if (noResultEl) {
+        noResultEl.style.display = 'none';
+      }
+    }
+
+    function saveLocalState() {
+      const ownerId = document.getElementById('ownerIdInput').value;
+      const substituteId = document.getElementById('substituteIdInput').value;
+      const readings = {};
+      document.querySelectorAll('.meter-input-field').forEach(input => {
+        if (input.value) readings[input.id.replace('reading_', '')] = input.value;
+      });
+      const state = { ownerId, substituteId, isSubstituteMode, readings, notes: meterNotes, hasList: !document.getElementById('meterListContainer').classList.contains('hidden'), timestamp: new Date().getTime() };
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function restoreLocalState() {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (!saved) return;
+      try {
+        const state = JSON.parse(saved);
+        if (state.ownerId) document.getElementById('ownerIdInput').value = state.ownerId;
+        if (state.substituteId) document.getElementById('substituteIdInput').value = state.substituteId;
+        if (state.isSubstituteMode) { isSubstituteMode = true; document.getElementById('substituteSection').classList.remove('hidden'); }
+        if (state.hasList && state.ownerId) { startRecording(true, state); }
+      } catch (e) { console.error(e); }
+    }
+
+    function clearLocalState() { localStorage.removeItem(LOCAL_STORAGE_KEY); }
+    function toggleSubstituteMode() { const section = document.getElementById('substituteSection'); isSubstituteMode = !section.classList.contains('hidden'); if (!isSubstituteMode) { section.classList.remove('hidden'); isSubstituteMode = true; } else { section.classList.add('hidden'); document.getElementById('substituteIdInput').value = ''; isSubstituteMode = false; } saveLocalState(); }
+
+    function startRecording(isRestore = false, restoredState = null) {
+      const ownerId = document.getElementById('ownerIdInput').value.trim();
+      const substituteId = document.getElementById('substituteIdInput').value.trim();
+      if (ownerId.length !== 6 || isNaN(ownerId)) { if (!isRestore) showMsg("กรุณากรอกรหัสพนักงาน 6 หลัก", true); return; }
+      if (isSubstituteMode && (substituteId.length !== 6 || isNaN(substituteId))) { if (!isRestore) showMsg("กรุณากรอกรหัสพนักงาน (จดแทน) 6 หลัก", true); return; }
+      
+      const container = document.getElementById('meterListContainer');
+      const searchContainer = document.getElementById('searchContainer');
+      
+      container.classList.remove('hidden');
+      if (!isRestore) {
+        container.innerHTML = '<div class="text-center p-10 text-blue-100 font-bold animate-pulse text-xl">กำลังค้นหามิเตอร์...</div>';
+        searchContainer.classList.add('hidden'); // ซ่อนช่องค้นหาตอนโหลด
+      }
+      
+      saveLocalState();
+      google.script.run.withSuccessHandler(meters => { renderMeters(meters, restoredState); }).getMetersByOwner(ownerId);
+    }
+
+    function renderMeters(meters, restoredState = null) {
+      const container = document.getElementById('meterListContainer');
+      const footer = document.getElementById('footerSection');
+      const searchContainer = document.getElementById('searchContainer');
+      
+      if (!restoredState) { meterNotes = {}; meterImages = {}; } else { meterNotes = restoredState.notes || {}; }
+      container.innerHTML = ''; 
+
+      if (meters.length === 0) {
+        container.innerHTML = '<div class="bg-white p-10 rounded-3xl text-center text-slate-500 font-bold text-xl border-2 border-dashed border-slate-300">ไม่พบมิเตอร์ที่ต้องจดสำหรับรหัสนี้</div>';
+        footer.classList.add('hidden');
+        searchContainer.classList.add('hidden');
+        return;
+      }
+
+      // แสดงช่องค้นหา
+      searchContainer.classList.remove('hidden');
+      // ล้างค่าค้นหาเดิม
+      document.getElementById('searchInput').value = '';
+
+      meters.forEach(m => {
+        const card = document.createElement('div');
+        // เพิ่ม data attribute สำหรับค้นหา
+        card.className = "p-6 meter-card space-y-6";
+        card.dataset.searchName = m.name.toLowerCase();
+        card.dataset.searchId = m.id.toLowerCase();
+        
+        let savedVal = (restoredState && restoredState.readings && restoredState.readings[m.id]) ? restoredState.readings[m.id] : "";
+        let badgeHtml = meterNotes[m.id] ? '' : 'hidden';
+        let badgeText = meterNotes[m.id] ? "📌 " + meterNotes[m.id] : "";
+
+        card.innerHTML = `
+            <div class="flex justify-between items-start border-b border-slate-100 pb-4">
+              <div class="pr-2">
+                <span class="text-2xl font-bold text-slate-800 leading-tight">${m.name}</span>
+                <div class="text-sm text-slate-400 mt-1">โซน: ${m.zone}</div>
+                <div id="noteBadge_${m.id}" class="${badgeHtml} mt-2 inline-block px-3 py-1 bg-red-100 text-red-700 text-sm font-bold rounded-lg">${badgeText}</div>
+              </div>
+              <div class="shrink-0 text-right bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                <div class="text-[10px] text-slate-400 font-bold uppercase mb-1">ครั้งก่อน</div>
+                <div class="text-2xl font-bold text-blue-600 font-mono">${m.lastReading}</div>
+              </div>
+            </div>
+            <div class="space-y-4">
+              <input type="number" id="reading_${m.id}" 
+                     data-old="${m.lastReading}" 
+                     data-name="${m.name}" 
+                     data-zone="${m.zone}" 
+                     data-lastdate="${m.lastRecordedDate}"
+                     data-lastzone="${m.lastZone}" 
+                     data-lastname="${m.lastName}" 
+                     onblur="checkValueAbnormal(this); saveLocalState()" 
+                     oninput="saveLocalState()"
+                     value="${savedVal}"
+                     inputmode="decimal" placeholder="กรอกเลขใหม่" class="meter-input-field main-input w-full px-4 bg-yellow-50 border-2 border-yellow-200 rounded-2xl font-bold text-5xl text-blue-900 text-center py-4 focus:bg-white focus:border-blue-400 outline-none shadow-inner transition-all">
+              <div class="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-slate-200">
+                <p class="text-[11px] font-bold text-slate-500 uppercase mb-3 text-center tracking-wider">📸 ถ่ายภาพหน้าปัดมิเตอร์</p>
+                <div class="flex flex-col gap-3">
+                   <button onclick="document.getElementById('file_${m.id}').click()" id="btnPhoto_${m.id}" class="w-full py-4 bg-white border-2 border-blue-100 rounded-2xl text-blue-600 font-bold flex items-center justify-center gap-3 shadow-sm active:bg-blue-50">
+                      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                      แตะเพื่อเปิดกล้อง
+                   </button>
+                   <input type="file" id="file_${m.id}" accept="image/*" capture="environment" class="hidden" onchange="compressImage(this, '${m.id}')">
+                   <div id="previewContainer_${m.id}" class="relative hidden"><img id="preview_${m.id}" class="photo-preview w-full shadow-lg"><button onclick="removeImage('${m.id}')" class="absolute top-4 right-4 bg-red-600 text-white rounded-full p-3 shadow-xl border-4 border-white active:scale-90"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>
+                </div>
+              </div>
+            </div>`;
+        container.appendChild(card);
+      });
+      footer.classList.remove('hidden');
+      if (restoredState) { document.querySelectorAll('.meter-input-field').forEach(input => { const mId = input.id.replace('reading_', ''); if (input.value && meterNotes[mId]) { input.classList.remove('bg-yellow-50', 'border-yellow-200'); input.classList.add('bg-green-50', 'border-green-400'); } }); }
+    }
+
+    function checkValueAbnormal(input) {
+      if (!input.value) { saveLocalState(); return; }
+      
+      activeWarningInput = input;
+      warningQueue = [];
+      accumulatedNotes = [];
+      currentWarningIndex = 0;
+      
+      const newVal = parseFloat(input.value);
+      const oldVal = parseFloat(input.dataset.old);
+      const mName = input.dataset.name;     
+      const mZone = input.dataset.zone;     
+      const lastName = input.dataset.lastname; 
+      const lastZone = input.dataset.lastzone; 
+      const lastMonthYear = parseMonthYear(input.dataset.lastdate);
+      const now = new Date();
+      
+      // 1. ROLLOVER & HIGH USAGE (Priority 1)
+      const isRollover = newVal < oldVal;
+      const isHigh = (newVal - oldVal) >= 1000;
+      
+      if (isRollover) {
+         warningQueue.push({
+            type: 'ROLLOVER',
+            msg: `เลขใหม่ (${newVal}) <b>น้อยกว่าเดิม</b> (${oldVal})<br>ส่วนต่าง: ${newVal - oldVal}`,
+            cancelText: "ไม่ใช่, ขอแก้ตัวเลขใหม่",
+            buttons: [{ text: 'เลขมิเตอร์วนรอบ', note: 'มิเตอร์ครบรอบ (Rollover)', class: 'bg-amber-600 text-white' }]
+         });
+      } else if (isHigh) {
+         warningQueue.push({
+            type: 'HIGH_USAGE',
+            msg: `ยอดใช้ไฟสูงผิดปกติ (+${Math.round(newVal-oldVal)} หน่วย)`,
+            cancelText: "ไม่ใช่, ขอแก้ตัวเลขใหม่",
+            buttons: [{ text: 'ยืนยันว่าถูกต้อง', note: '', class: 'bg-green-600 text-white' }]
+         });
+      }
+
+      // 2. MOVED/CHANGED CHECK
+      const isZoneDiff = lastZone && lastZone !== "" && lastZone !== mZone;
+      if (isZoneDiff) {
+         warningQueue.push({
+            type: 'MOVED',
+            msg: `<b>มีการย้ายโซน/พื้นที่</b><br>โซนเดิม: ${lastZone} <br>⬇️<br> โซนใหม่: ${mZone}`,
+            cancelText: "ไม่ใช่",
+            buttons: [
+                { text: 'ใช่ มีการเปลี่ยน/ย้ายมิเตอร์', note: 'เปลี่ยน/ย้ายมิเตอร์ (Rollover)', class: 'bg-amber-600 text-white' }
+            ]
+         });
+      }
+
+      // 3. DUPLICATE CHECK
+      if (lastMonthYear && lastMonthYear.month === (now.getMonth() + 1) && lastMonthYear.year === now.getFullYear()) {
+         warningQueue.push({
+            type: 'DUPLICATE',
+            msg: "มีการบันทึกในเดือนนี้ไปแล้ว",
+            cancelText: "ไม่ใช่",
+            buttons: [
+                { text: 'ใช่ มีการบันทึกในเดือนนั้นหลายครั้ง', note: 'เปลี่ยน/ย้ายมิเตอร์ (Rollover)', class: 'bg-blue-600 text-white shadow-lg' },
+                { text: 'มีการเปลี่ยน/ย้ายมิเตอร์', note: 'เปลี่ยน/ย้ายมิเตอร์ (Rollover)', class: 'bg-slate-500 text-white text-sm' }
+            ]
+         });
+      }
+
+      if (warningQueue.length > 0) { showNextWarning(); } else { setNoteAndAccept(""); }
+    }
+
+    function showNextWarning() {
+       if (currentWarningIndex >= warningQueue.length) {
+          const validNotes = accumulatedNotes.filter(n => n !== "");
+          const finalNote = validNotes.join(', ');
+          setNoteAndAccept(finalNote);
+          return;
+       }
+       const warning = warningQueue[currentWarningIndex];
+       const mName = activeWarningInput.dataset.name;
+       document.getElementById('warningText').innerHTML = `มิเตอร์: <b>${mName}</b><br>${warning.msg}`;
+       document.getElementById('modalHeader').innerText = "แจ้งเตือน (" + (currentWarningIndex + 1) + "/" + warningQueue.length + ")";
+       document.getElementById('optionsContainer').innerHTML = warning.buttons.map(btn => `<button onclick="handleWarningDecision('${btn.note}')" class="btn-action ${btn.class}">${btn.text}</button>`).join('');
+       document.getElementById('cancelBtn').innerText = warning.cancelText || "❌ แก้ไขตัวเลข";
+       document.getElementById('confirmModal').classList.add('active');
+    }
+
+    function handleWarningDecision(note) { accumulatedNotes.push(note); currentWarningIndex++; showNextWarning(); }
+    function setNoteAndAccept(note) { if (activeWarningInput) { const mId = activeWarningInput.id.replace('reading_', ''); meterNotes[mId] = note; const badge = document.getElementById('noteBadge_' + mId); document.getElementById('confirmModal').classList.remove('active'); if (note && note !== "") { badge.innerText = "📌 " + note; badge.classList.remove('hidden'); activeWarningInput.classList.remove('bg-yellow-50', 'border-yellow-200'); activeWarningInput.classList.add('bg-green-50', 'border-green-400'); } else { badge.classList.add('hidden'); activeWarningInput.classList.remove('bg-yellow-50', 'border-yellow-200'); activeWarningInput.classList.add('bg-green-50', 'border-green-400'); } } saveLocalState(); }
+    function rejectAndFixValue() { if (activeWarningInput) { activeWarningInput.value = ''; activeWarningInput.classList.remove('bg-green-50', 'border-green-400'); activeWarningInput.classList.add('bg-yellow-50', 'border-yellow-200'); activeWarningInput.focus(); } document.getElementById('confirmModal').classList.remove('active'); warningQueue = []; accumulatedNotes = []; saveLocalState(); }
+    function parseMonthYear(dateStr) { if (!dateStr) return null; const d = new Date(dateStr); return isNaN(d.getTime()) ? null : { month: d.getMonth() + 1, year: d.getFullYear() }; }
+    function compressImage(input, mId) { const file = input.files[0]; if (!file) return; const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = function(e) { const img = new Image(); img.src = e.target.result; img.onload = function() { const canvas = document.createElement('canvas'); let width = img.width; let height = img.height; const MAX_SIZE = 1024; if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } } canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height); const dataUrl = canvas.toDataURL('image/jpeg', 0.6); meterImages[mId] = dataUrl; document.getElementById('preview_' + mId).src = dataUrl; document.getElementById('previewContainer_' + mId).classList.remove('hidden'); }; }; }
+    function removeImage(mId) { delete meterImages[mId]; document.getElementById('file_' + mId).value = ""; document.getElementById('previewContainer_' + mId).classList.add('hidden'); }
+    function closeSuccess() { document.getElementById('successModal').classList.remove('active'); clearLocalState(); document.getElementById('ownerIdInput').value = ''; document.getElementById('substituteIdInput').value = ''; document.getElementById('substituteSection').classList.add('hidden'); isSubstituteMode = false; document.getElementById('meterListContainer').classList.add('hidden'); document.getElementById('meterListContainer').innerHTML = ''; document.getElementById('footerSection').classList.add('hidden'); document.getElementById('searchContainer').classList.add('hidden'); meterNotes = {}; meterImages = {}; resetSubmitUI(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    function resetSubmitUI() { const btn = document.getElementById('submitBtn'); const progContainer = document.getElementById('progressContainer'); const progBar = document.getElementById('progressBar'); const progText = document.getElementById('progressText'); if (progressInterval) clearInterval(progressInterval); btn.disabled = false; btn.innerHTML = '<span class="text-2xl">💾</span> <span>ส่ง</span>'; progContainer.style.display = 'none'; progBar.style.width = '0%'; progText.innerText = '0%'; }
+    function startSimulatedProgress() { const progContainer = document.getElementById('progressContainer'); const progBar = document.getElementById('progressBar'); const progText = document.getElementById('progressText'); progContainer.style.display = 'block'; let width = 0; if (progressInterval) clearInterval(progressInterval); progressInterval = setInterval(() => { if (width >= 90) { clearInterval(progressInterval); } else { width += 5; progBar.style.width = width + '%'; progText.innerText = width + '%'; } }, 200); }
+    function finishProgress() { if (progressInterval) clearInterval(progressInterval); const progBar = document.getElementById('progressBar'); const progText = document.getElementById('progressText'); progBar.style.width = '100%'; progText.innerText = '100%'; }
+    function showMsg(text, isError = false) { const box = document.getElementById('messageBox'); box.textContent = text; box.className = `fixed top-5 left-1/2 -translate-x-1/2 px-8 py-6 rounded-2xl text-white font-bold shadow-2xl z-[500] text-center min-w-[320px] transition-all ${isError ? 'bg-red-600' : 'bg-blue-800'}`; box.classList.add('show'); setTimeout(() => box.classList.remove('show'), 5000); }
+    function submitFinalProcess() { const ownerId = document.getElementById('ownerIdInput').value.trim(); const substituteId = document.getElementById('substituteIdInput').value.trim(); if (ownerId.length !== 6 || isNaN(ownerId)) { showMsg("กรุณากรอกรหัสพนักงาน 6 หลัก", true); return; } if (isSubstituteMode && (substituteId.length !== 6 || isNaN(substituteId))) { showMsg("กรุณากรอกรหัสพนักงาน (จดแทน) 6 หลัก", true); return; } const readings = []; document.querySelectorAll('.meter-input-field').forEach(input => { if (input.value) { const mId = input.id.replace('reading_', ''); readings.push({ id: mId, name: input.dataset.name, val: parseFloat(input.value), note: meterNotes[mId] || "", imageBody: meterImages[mId] || null, zone: input.dataset.zone }); } }); if (readings.length === 0) { showMsg("กรุณากรอกข้อมูลอย่างน้อย 1 รายการ", true); return; } const btn = document.getElementById('submitBtn'); btn.disabled = true; btn.innerText = "⏳ กำลังส่ง..."; startSimulatedProgress(); google.script.run.withSuccessHandler(msg => { finishProgress(); setTimeout(() => { document.getElementById('successText').innerText = msg; document.getElementById('successModal').classList.add('active'); }, 500); }).withFailureHandler(err => { resetSubmitUI(); showMsg("ข้อผิดพลาด: " + err.message.replace('Error: ', ''), true); }).submitReadingData({ ownerId: ownerId, substituteId: isSubstituteMode ? substituteId : null, readings: readings }); }
+  </script>
+</body>
+</html>
